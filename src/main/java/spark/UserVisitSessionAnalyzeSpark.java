@@ -61,7 +61,7 @@ public class UserVisitSessionAnalyzeSpark {
         JSONObject jsonObject = JSONObject.parseObject(ta.getTask_param());
         JavaRDD<Row> row = getActionRDDByDataRange(sqlContext, jsonObject);
 
-        JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
+//        JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
 
         JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(sqlContext, row);
         Accumulator<String> accumulator = jsc.accumulator("", new SessionAggrStatAccumulator());
@@ -217,6 +217,7 @@ public class UserVisitSessionAnalyzeSpark {
     }
 
     private static void calculateAnadPersistAggrStat(String value, Long taskid) {
+        System.out.println("-----------------------------------------------");
         System.out.println(value);
         long session_count = Long.valueOf(StringUtils.getFieldFromConcatString(
                 value, "\\|", Constants.SESSION_COUNT));
@@ -284,6 +285,7 @@ public class UserVisitSessionAnalyzeSpark {
         double step_length_60_ratio = NumberUtils.formatDouble(
                 (double) step_length_60 / (double) session_count, 2);
         SessionAggrStat sessionAggrStat = new SessionAggrStat();
+        sessionAggrStat.setSession_count(session_count);
         sessionAggrStat.setVisit_length_1s_3s_ratio(visit_length_1s_3s_ratio);
         sessionAggrStat.setVisit_length_4s_6s_ratio(visit_length_4s_6s_ratio);
         sessionAggrStat.setVisit_length_7s_9s_ratio(visit_length_7s_9s_ratio);
