@@ -63,7 +63,9 @@ public class UserVisitSessionAnalyzeSpark {
         Task ta = task.findById(taskid);
         JSONObject jsonObject = JSONObject.parseObject(ta.getTask_param());
         JavaRDD<Row> row = getActionRDDByDataRange(sqlContext, jsonObject);
-
+        /**
+         * 原始RDD
+         */
         JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
 
         JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(sqlContext, row);
@@ -81,7 +83,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 随机抽取session
          */
-        randomExtractSession(ta.getTask_id(),fiter,stringRowJavaPairRDD);
+        randomExtractSession(ta.getTask_id(), fiter, stringRowJavaPairRDD);
 
 
         /**
@@ -89,8 +91,63 @@ public class UserVisitSessionAnalyzeSpark {
          */
         calculateAnadPersistAggrStat(accumulator.value(), taskid);
 
+        getTopNCategory(fiter, stringRowJavaPairRDD);
+
         jsc.close();
     }
+
+    private static void getTopNCategory(JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+        //获取符合条件的session的详细信息
+        JavaPairRDD<String, Tuple2<String, Row>> join = fiter.join(stringRowJavaPairRDD);
+        JavaPairRDD<String, Row> RDD1 = join.mapToPair(new PairFunction<Tuple2<String, Tuple2<String, Row>>, String, Row>() {
+            public Tuple2<String, Row> call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
+                String sessionid = tuple._1;
+                Row row = tuple._2._2;
+                return new Tuple2<String, Row>(sessionid, row);
+
+
+            }
+        });
+
+
+        //获取session访问过的所有品类id
+
+        JavaPairRDD<Long, Long> flat = RDD1.flatMapToPair(new PairFlatMapFunction<Tuple2<String, Row>, Long, Long>() {
+            public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> tuple) throws Exception {
+
+                List<Tuple2<Long, Long>> list = new ArrayList<Tuple2<Long, Long>>();
+                String sessionid = tuple._1;
+                Row row = tuple._2;
+                Long click = row.getLong(6);
+                if (click != null) {
+                    list.add(new Tuple2<Long, Long>(click, click));
+                }
+                String order = row.getString(8);
+                if (order != null) {
+                    String[] split = order.split(",");
+                    for (String s : split) {
+                        list.add(new Tuple2<Long, Long>(Long.valueOf(s), Long.valueOf(s)));
+                    }
+
+                }
+                String pay = row.getString(10);
+                if (pay != null) {
+                    String[] split = pay.split(",");
+                    for (String s : split) {
+                        list.add(new Tuple2<Long, Long>(Long.valueOf(s), Long.valueOf(s)));
+                    }
+                }
+                return list;
+
+            }
+        });
+
+        flat.count();
+
+
+
+    }
+
 
     private static void randomExtractSession(final long task_id, JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
         System.out.println("运行randomExtractSession方法");
@@ -165,7 +222,7 @@ public class UserVisitSessionAnalyzeSpark {
                 for (int i = 0; i < hourExtractNumber; i++) {
                     int extractIndex = random.nextInt(co);
                     while (integers.contains(extractIndex)) {
-                        extractIndex=random.nextInt(co);
+                        extractIndex = random.nextInt(co);
                     }
 
                     integers.add(extractIndex);
@@ -224,7 +281,7 @@ public class UserVisitSessionAnalyzeSpark {
         JavaPairRDD<String, Tuple2<String, Row>> join = extractSessionidsRDD.join(stringRowJavaPairRDD);
         join.foreach(new VoidFunction<Tuple2<String, Tuple2<String, Row>>>() {
             public void call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
-                Row row=tuple._2._2;
+                Row row = tuple._2._2;
                 SessionDetail sessionDetail = new SessionDetail();
                 sessionDetail.setTaskid(task_id);
                 sessionDetail.setUserid(row.getLong(1));
@@ -243,10 +300,6 @@ public class UserVisitSessionAnalyzeSpark {
 
             }
         });
-
-
-
-
 
 
     }
