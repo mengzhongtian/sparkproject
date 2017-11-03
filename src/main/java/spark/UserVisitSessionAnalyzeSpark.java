@@ -129,7 +129,76 @@ public class UserVisitSessionAnalyzeSpark {
         });
 
         //计算各品类的点击、下单支付的次
-        getClickCount(RDD1);
+        JavaPairRDD<Long, Long> clickCount = getClickCount(RDD1);
+        //计算各个品类下单次数
+        JavaPairRDD<Long, Long> orderCount = getOrderCount(RDD1);
+        //计算各个品类支付次数
+        JavaPairRDD<Long, Long> payCount = getPayCount(RDD1);
+
+
+    }
+
+    private static JavaPairRDD<Long, Long> getPayCount(JavaPairRDD<String, Row> rdd1) {
+
+        JavaPairRDD<String, Row> filter = rdd1.filter(new Function<Tuple2<String, Row>, Boolean>() {
+            public Boolean call(Tuple2<String, Row> v1) throws Exception {
+
+                String order = v1._2.getString(10);
+                return order == null ? false : true;
+            }
+        });
+        JavaPairRDD<Long, Long> flatMap = filter.flatMapToPair(new PairFlatMapFunction<Tuple2<String, Row>, Long, Long>() {
+            public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> tuple) throws Exception {
+                ArrayList<Tuple2<Long, Long>> list = new ArrayList<Tuple2<Long, Long>>();
+                String pay = tuple._2.getString(10);
+                String[] split = pay.split(",");
+                for (String s : split) {
+                    list.add(new Tuple2<Long, Long>(Long.valueOf(s), 1L));
+
+                }
+                return list;
+            }
+        });
+
+        JavaPairRDD<Long, Long> resultRDD = flatMap.reduceByKey(new Function2<Long, Long, Long>() {
+            public Long call(Long v1, Long v2) throws Exception {
+                return v1 + v2;
+            }
+        });
+
+
+        return resultRDD;
+    }
+
+    private static JavaPairRDD<Long, Long> getOrderCount(JavaPairRDD<String, Row> rdd1) {
+        JavaPairRDD<String, Row> filter = rdd1.filter(new Function<Tuple2<String, Row>, Boolean>() {
+            public Boolean call(Tuple2<String, Row> v1) throws Exception {
+
+                String order = v1._2.getString(8);
+                return order == null ? false : true;
+            }
+        });
+        JavaPairRDD<Long, Long> flatMap = filter.flatMapToPair(new PairFlatMapFunction<Tuple2<String, Row>, Long, Long>() {
+            public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> tuple) throws Exception {
+                ArrayList<Tuple2<Long, Long>> list = new ArrayList<Tuple2<Long, Long>>();
+                String order = tuple._2.getString(8);
+                String[] split = order.split(",");
+                for (String s : split) {
+                    list.add(new Tuple2<Long, Long>(Long.valueOf(s), 1L));
+
+                }
+                return list;
+            }
+        });
+
+        JavaPairRDD<Long, Long> resultRDD = flatMap.reduceByKey(new Function2<Long, Long, Long>() {
+            public Long call(Long v1, Long v2) throws Exception {
+                return v1 + v2;
+            }
+        });
+
+
+        return resultRDD;
 
 
     }
