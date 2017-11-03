@@ -12,31 +12,18 @@ import domain.SessionAggrStat;
 import domain.SessionDetail;
 import domain.SessionRandomExtract;
 import domain.Task;
-import groovy.sql.Sql;
-import javafx.scene.chart.PieChart;
-import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.spark.Accumulator;
-import org.apache.spark.AccumulatorParam;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFlatMapFunction;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.api.java.function.VoidFunction;
+import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.catalyst.expressions.Rand;
 import org.apache.spark.sql.hive.HiveContext;
-import org.stringtemplate.v4.ST;
 import scala.Tuple2;
-import scala.collection.immutable.Stream;
-import scala.tools.nsc.backend.icode.analysis.CopyPropagation;
-import scala.xml.PrettyPrinter;
-import sun.security.krb5.Config;
 import test.MockData;
 import util.*;
 
@@ -138,12 +125,44 @@ public class UserVisitSessionAnalyzeSpark {
                     }
                 }
                 return list;
+            }
+        });
+
+        //计算各品类的点击、下单支付的次
+        getClickCount(RDD1);
+
+
+    }
+
+    /**
+     * 计算各个品类点击次数
+     *
+     * @param rdd1
+     */
+    private static JavaPairRDD<Long, Long> getClickCount(JavaPairRDD<String, Row> rdd1) {
+
+        //排除点击的品类是空的情况
+        JavaPairRDD<String, Row> filter = rdd1.filter(new Function<Tuple2<String, Row>, Boolean>() {
+            public Boolean call(Tuple2<String, Row> v1) throws Exception {
+                Long click = v1._2.getLong(6);
+                return click == null ? false : true;
 
             }
         });
 
-        flat.count();
+        JavaPairRDD<Long, Long> map = filter.mapToPair(new PairFunction<Tuple2<String, Row>, Long, Long>() {
+            public Tuple2<Long, Long> call(Tuple2<String, Row> tuple) throws Exception {
+                long clickid = tuple._2.getLong(6);
+                return new Tuple2<Long, Long>(clickid, 1L);
+            }
+        });
+        JavaPairRDD<Long, Long> resultRDD = map.reduceByKey(new Function2<Long, Long, Long>() {
+            public Long call(Long v1, Long v2) throws Exception {
+                return v1 + v2;
 
+            }
+        });
+        return resultRDD;
 
 
     }
