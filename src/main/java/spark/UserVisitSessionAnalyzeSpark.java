@@ -1,6 +1,7 @@
 package spark;
 
 import com.alibaba.fastjson.JSONObject;
+import com.google.common.base.Optional;
 import conf.ConfigurationManager;
 import constant.Constants;
 import dao.Factory.DAOFactory;
@@ -84,6 +85,9 @@ public class UserVisitSessionAnalyzeSpark {
     }
 
     private static void getTopNCategory(JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+        /**
+         * 第一步：获取符合条件的session访问过的所有品类
+         */
         //获取符合条件的session的详细信息
         JavaPairRDD<String, Tuple2<String, Row>> join = fiter.join(stringRowJavaPairRDD);
         JavaPairRDD<String, Row> RDD1 = join.mapToPair(new PairFunction<Tuple2<String, Tuple2<String, Row>>, String, Row>() {
@@ -128,12 +132,71 @@ public class UserVisitSessionAnalyzeSpark {
             }
         });
 
-        //计算各品类的点击、下单支付的次
+        /**
+         * 第二步：计算各品类的点击、下单和支付的次数
+         */
+        //计算各品类的点击次数
         JavaPairRDD<Long, Long> clickCount = getClickCount(RDD1);
         //计算各个品类下单次数
         JavaPairRDD<Long, Long> orderCount = getOrderCount(RDD1);
         //计算各个品类支付次数
         JavaPairRDD<Long, Long> payCount = getPayCount(RDD1);
+
+        /**
+         * 第三步：join各品类与它的点击、下单和支付的次数
+         */
+
+        JavaPairRDD<Long, String> longStringJavaPairRDD = joinCount(flat, clickCount, orderCount, payCount);
+
+
+    }
+
+    private static JavaPairRDD<Long, String> joinCount(JavaPairRDD<Long, Long> flat, JavaPairRDD<Long, Long> clickCount, JavaPairRDD<Long, Long> orderCount, JavaPairRDD<Long, Long> payCount) {
+        JavaPairRDD<Long, Tuple2<Long, Optional<Long>>> leftClick = flat.leftOuterJoin(clickCount);
+        JavaPairRDD<Long, String> map = leftClick.mapToPair(new PairFunction<Tuple2<Long, Tuple2<Long, Optional<Long>>>, Long, String>() {
+            public Tuple2<Long, String> call(Tuple2<Long, Tuple2<Long, Optional<Long>>> tuple) throws Exception {
+                long clickid = tuple._1;
+                long clickCount = 0L;
+                Optional<Long> count = tuple._2._2;
+                if (count.isPresent()) {
+                    clickCount = count.get();
+                }
+                String s = Constants.FIELD_CLICK_COUNT + "=" + clickCount;
+                return new Tuple2<Long, String>(clickid, s);
+            }
+        });
+
+        map = map.leftOuterJoin(orderCount).mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Optional<Long>>>, Long, String>() {
+            public Tuple2<Long, String> call(Tuple2<Long, Tuple2<String, Optional<Long>>> tuple) throws Exception {
+                Long id = tuple._1;
+                String value = tuple._2._1;
+                Long count = 0L;
+                Optional<Long> orderCount = tuple._2._2;
+                if (orderCount.isPresent()) {
+                    count = orderCount.get();
+                }
+                value = value + "|" + Constants.FIELD_ORDER_COUNT + "=" + count;
+                return new Tuple2<Long, String>(id, value);
+
+            }
+        });
+
+        map = map.leftOuterJoin(payCount).mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Optional<Long>>>, Long, String>() {
+            public Tuple2<Long, String> call(Tuple2<Long, Tuple2<String, Optional<Long>>> tuple) throws Exception {
+                Long id = tuple._1;
+                String value = tuple._2._1;
+                Long count = 0L;
+                Optional<Long> payCount = tuple._2._2;
+                if (payCount.isPresent()) {
+                    count = payCount.get();
+                }
+                value = value + "|" + Constants.FIELD_PAY_COUNT + "=" + count;
+                return new Tuple2<Long, String>(id, value);
+
+            }
+        });
+
+        return map;
 
 
     }
