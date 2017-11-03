@@ -5,9 +5,11 @@ import conf.ConfigurationManager;
 import constant.Constants;
 import dao.Factory.DAOFactory;
 import dao.SessionAggrDao;
+import dao.SessionDetailDao;
 import dao.SessionRandomExtractDao;
 import dao.TaskDao;
 import domain.SessionAggrStat;
+import domain.SessionDetail;
 import domain.SessionRandomExtract;
 import domain.Task;
 import groovy.sql.Sql;
@@ -23,6 +25,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
@@ -61,7 +64,7 @@ public class UserVisitSessionAnalyzeSpark {
         JSONObject jsonObject = JSONObject.parseObject(ta.getTask_param());
         JavaRDD<Row> row = getActionRDDByDataRange(sqlContext, jsonObject);
 
-//        JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
+        JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
 
         JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(sqlContext, row);
         Accumulator<String> accumulator = jsc.accumulator("", new SessionAggrStatAccumulator());
@@ -78,7 +81,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 随机抽取session
          */
-//        randomExtractSession(ta.getTask_id(),fiter);
+        randomExtractSession(ta.getTask_id(),fiter,stringRowJavaPairRDD);
 
 
         /**
@@ -89,9 +92,11 @@ public class UserVisitSessionAnalyzeSpark {
         jsc.close();
     }
 
-    private static void randomExtractSession(final long task_id, JavaPairRDD<String, String> fiter) {
+    private static void randomExtractSession(final long task_id, JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+        System.out.println("运行randomExtractSession方法");
         Random random = new Random();
 
+        //将RDD转化为key：小时，value：拼接的str的格式
         JavaPairRDD<String, String> timeStrRDD = fiter.mapToPair(new PairFunction<Tuple2<String, String>, String, String>() {
             public Tuple2<String, String> call(Tuple2<String, String> t) throws Exception {
                 String str = t._2;
@@ -102,6 +107,7 @@ public class UserVisitSessionAnalyzeSpark {
             }
         });
 
+        //把每日，每时，的seesion个数放入Map里
         Map<String, Object> countMap = timeStrRDD.countByKey();
         HashMap<String, Map<String, Long>> dateHourCountMap = new HashMap<String, Map<String, Long>>();
         for (Map.Entry<String, Object> countEntry : countMap.entrySet()) {
@@ -118,6 +124,9 @@ public class UserVisitSessionAnalyzeSpark {
             stringLongMap.put(hour, count);
         }
 
+        /**
+         * dateHourExtractMap:存储着每天，每时要提取的session的索引
+         */
         int extractNumberPerDay = ConfigurationManager.getInteger(Constants.EXTRACT_SESSION_NUMBER) / dateHourCountMap.size();
 
         final HashMap<String, Map<String, List<Integer>>> dateHourExtractMap = new HashMap<String, Map<String, List<Integer>>>();
@@ -156,7 +165,7 @@ public class UserVisitSessionAnalyzeSpark {
                 for (int i = 0; i < hourExtractNumber; i++) {
                     int extractIndex = random.nextInt(co);
                     while (integers.contains(extractIndex)) {
-                        random.nextInt(co);
+                        extractIndex=random.nextInt(co);
                     }
 
                     integers.add(extractIndex);
@@ -169,20 +178,21 @@ public class UserVisitSessionAnalyzeSpark {
         }
 
         /**
-         * 最后一步，提取session
+         * 第三部，提取session
          */
         JavaPairRDD<String, Iterable<String>> stringIterableJavaPairRDD = timeStrRDD.groupByKey();
-        stringIterableJavaPairRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<String,Iterable<String>>, String, String>() {
+
+        JavaPairRDD<String, String> extractSessionidsRDD = stringIterableJavaPairRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<String, Iterable<String>>, String, String>() {
             public Iterable<Tuple2<String, String>> call(Tuple2<String, Iterable<String>> tuple) throws Exception {
                 List<Tuple2<String, String>> extractSessionids = new ArrayList<Tuple2<String, String>>();
 
                 String dateHour = tuple._1;
-                String day=dateHour.split("_")[0];
+                String day = dateHour.split("_")[0];
                 String hour = dateHour.split("_")[1];
                 Iterator<String> iterator = tuple._2.iterator();
 
                 List<Integer> integers = dateHourExtractMap.get(day).get(hour);
-                int index=0;
+                int index = 0;
 
                 SessionRandomExtractDao sessionRandomExtractDao = DAOFactory.getSessionRandomExtractDao();
 
@@ -190,13 +200,13 @@ public class UserVisitSessionAnalyzeSpark {
                 while (iterator.hasNext()) {
                     String next = iterator.next();
                     if (integers.contains(index)) {
-                        String sessionid=StringUtils.getFieldFromConcatString(next, "\\|", Constants.FIELD_SESSION_ID);
+                        String sessionid = StringUtils.getFieldFromConcatString(next, "\\|", Constants.FIELD_SESSION_ID);
                         SessionRandomExtract sessionRandomExtract = new SessionRandomExtract();
                         sessionRandomExtract.setTask_id(task_id);
                         sessionRandomExtract.setSession_id(sessionid);
                         sessionRandomExtract.setStart_time(StringUtils.getFieldFromConcatString(next, "\\|", Constants.FIELD_START_TIME));
-                        sessionRandomExtract.setSearch_keywords(StringUtils.getFieldFromConcatString(next,"\\|",Constants.FILED_SEARCH_KEYWORDS));
-                        sessionRandomExtract.setClick_categoryids(StringUtils.getFieldFromConcatString(next,"\\|",Constants.FIELD_CLICK_CATEGORY_IDS));
+                        sessionRandomExtract.setSearch_keywords(StringUtils.getFieldFromConcatString(next, "\\|", Constants.FILED_SEARCH_KEYWORDS));
+                        sessionRandomExtract.setClick_categoryids(StringUtils.getFieldFromConcatString(next, "\\|", Constants.FIELD_CLICK_CATEGORY_IDS));
                         sessionRandomExtractDao.insert(sessionRandomExtract);
                         extractSessionids.add(new Tuple2<String, String>(sessionid, sessionid));
 
@@ -211,7 +221,32 @@ public class UserVisitSessionAnalyzeSpark {
          * 第四部：抽取出来session的明细数据
          *
          */
-//        stringIterableJavaPairRDD.join()
+        JavaPairRDD<String, Tuple2<String, Row>> join = extractSessionidsRDD.join(stringRowJavaPairRDD);
+        join.foreach(new VoidFunction<Tuple2<String, Tuple2<String, Row>>>() {
+            public void call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
+                Row row=tuple._2._2;
+                SessionDetail sessionDetail = new SessionDetail();
+                sessionDetail.setTaskid(task_id);
+                sessionDetail.setUserid(row.getLong(1));
+                sessionDetail.setSessionid(row.getString(2));
+                sessionDetail.setPageid(row.getLong(3));
+                sessionDetail.setActionTime(row.getString(4));
+                sessionDetail.setSearchKeyword(row.getString(5));
+                sessionDetail.setClickCategoryId(row.getLong(6));
+                sessionDetail.setClickProductId(row.getLong(7));
+                sessionDetail.setOrderCategoryIds(row.getString(8));
+                sessionDetail.setOrderProductIds(row.getString(9));
+                sessionDetail.setPayCategoryIds(row.getString(10));
+                sessionDetail.setPayProductIds(row.getString(11));
+                SessionDetailDao sessionDetailDao = DAOFactory.getSessionDetailDao();
+                sessionDetailDao.insert(sessionDetail);
+
+            }
+        });
+
+
+
+
 
 
     }
