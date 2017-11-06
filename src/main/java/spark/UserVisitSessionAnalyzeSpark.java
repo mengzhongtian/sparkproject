@@ -148,6 +148,27 @@ public class UserVisitSessionAnalyzeSpark {
 
         JavaPairRDD<Long, String> longStringJavaPairRDD = joinCount(flat, clickCount, orderCount, payCount);
 
+        /**
+         * 将数据映射成CategorySortKey，info的格式，然后进行二次排序。
+         */
+        JavaPairRDD<CategorySortKey, String> sortKey2countRDD = longStringJavaPairRDD.mapToPair(new PairFunction<Tuple2<Long, String>, CategorySortKey, String>() {
+            public Tuple2<CategorySortKey, String> call(Tuple2<Long, String> tuple) throws Exception {
+                String s = tuple._2;
+                Long categoryid = tuple._1;
+                long order = Long.valueOf(StringUtils.getFieldFromConcatString(s, "\\|", Constants.FIELD_ORDER_COUNT));
+                long pay = Long.valueOf(StringUtils.getFieldFromConcatString(s, "\\|", Constants.FIELD_PAY_COUNT));
+                long click = Long.valueOf(StringUtils.getFieldFromConcatString(s, "\\|", Constants.FIELD_CLICK_COUNT));
+                CategorySortKey categorySortKey = new CategorySortKey(click, order, pay);
+                return new Tuple2<CategorySortKey, String>(categorySortKey, s);
+
+
+            }
+        });
+        /**
+         * 排序
+         */
+        JavaPairRDD<CategorySortKey, String> sortedCategoryCountRDD = sortKey2countRDD.sortByKey(false);
+
 
     }
 
