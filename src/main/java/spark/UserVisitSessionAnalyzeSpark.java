@@ -4,15 +4,9 @@ import com.alibaba.fastjson.JSONObject;
 import com.google.common.base.Optional;
 import conf.ConfigurationManager;
 import constant.Constants;
+import dao.*;
 import dao.Factory.DAOFactory;
-import dao.SessionAggrDao;
-import dao.SessionDetailDao;
-import dao.SessionRandomExtractDao;
-import dao.TaskDao;
-import domain.SessionAggrStat;
-import domain.SessionDetail;
-import domain.SessionRandomExtract;
-import domain.Task;
+import domain.*;
 import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
@@ -79,12 +73,12 @@ public class UserVisitSessionAnalyzeSpark {
          */
         calculateAnadPersistAggrStat(accumulator.value(), taskid);
 
-        getTopNCategory(fiter, stringRowJavaPairRDD);
+        getTopNCategory(taskid,fiter, stringRowJavaPairRDD);
 
         jsc.close();
     }
 
-    private static void getTopNCategory(JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+    private static void getTopNCategory(Long taskid, JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
         /**
          * 第一步：获取符合条件的session访问过的所有品类
          */
@@ -161,13 +155,39 @@ public class UserVisitSessionAnalyzeSpark {
                 CategorySortKey categorySortKey = new CategorySortKey(click, order, pay);
                 return new Tuple2<CategorySortKey, String>(categorySortKey, s);
 
-
             }
         });
         /**
          * 排序
          */
         JavaPairRDD<CategorySortKey, String> sortedCategoryCountRDD = sortKey2countRDD.sortByKey(false);
+
+
+        /**
+         * take
+         */
+        List<Tuple2<CategorySortKey, String>> take = sortedCategoryCountRDD.take(10);
+        Top10CategoryDAO top10CategoryDAO = DAOFactory.getTop10CategoryDAO();
+
+        for (Tuple2<CategorySortKey, String> tuple : take) {
+            String s = tuple._2;
+            long categoryid = Long.valueOf(StringUtils.getFieldFromConcatString(
+                    s, "\\|", Constants.FIELD_CATEGORY_ID));
+            long click = Long.valueOf(StringUtils.getFieldFromConcatString(
+                    s, "\\|", Constants.FIELD_CLICK_COUNT));
+            long order = Long.valueOf(StringUtils.getFieldFromConcatString(
+                    s, "\\|", Constants.FIELD_ORDER_COUNT));
+            long pay = Long.valueOf(StringUtils.getFieldFromConcatString(
+                    s, "\\|", Constants.FIELD_PAY_COUNT));
+            Top10Category top10Category = new Top10Category();
+            top10Category.setTaskid(taskid);
+            top10Category.setCategoryid(categoryid);
+            top10Category.setClickCount(click);
+            top10Category.setOrderCount(order);
+            top10Category.setPayCount(pay);
+
+            top10CategoryDAO.inserrt(top10Category);
+        }
 
 
     }

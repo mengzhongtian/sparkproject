@@ -1,13 +1,7 @@
 package dao.Factory;
 
-import dao.SessionAggrDao;
-import dao.SessionDetailDao;
-import dao.SessionRandomExtractDao;
-import dao.TaskDao;
-import dao.impl.SessionAggrDaoImpl;
-import dao.impl.SessionDetailDaoImpl;
-import dao.impl.SessionRandomExtractDaoImpl;
-import dao.impl.TaskDaoImpl;
+import dao.*;
+import dao.impl.*;
 import domain.SessionDetail;
 import domain.SessionRandomExtract;
 
@@ -26,5 +20,8 @@ public class DAOFactory {
 
     public static SessionDetailDao getSessionDetailDao() {
         return new SessionDetailDaoImpl();
+    }
+    public static Top10CategoryDAO getTop10CategoryDAO(){
+        return new Top10CategoryDaoImpl();
     }
 }
