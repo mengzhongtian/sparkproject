@@ -19,7 +19,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
 import scala.Tuple2;
-import scala.tools.nsc.backend.icode.analysis.CopyPropagation;
+import scala.collection.immutable.Stream;
 import test.MockData;
 import util.*;
 
@@ -76,12 +76,83 @@ public class UserVisitSessionAnalyzeSpark {
          */
         calculateAnadPersistAggrStat(accumulator.value(), taskid);
 
-        getTopNCategory(taskid, sessionid2detailRDD);
+        /**
+         * 获取热门品类TOPN
+         */
+        List<Tuple2<CategorySortKey, String>> top10CategoryList = getTopNCategory(taskid, sessionid2detailRDD);
+
+
+        /**
+         * 获取top10热门session
+         */
+        getTop10Session(jsc, ta.getTask_id(), top10CategoryList, sessionid2detailRDD);
+
 
         jsc.close();
     }
 
-    private static void getTopNCategory(Long taskid, JavaPairRDD<String, Row> sessionid2detailRDD) {
+    private static void getTop10Session(JavaSparkContext jsc, long task_id, List<Tuple2<CategorySortKey, String>> top10CategoryList, JavaPairRDD<String, Row> sessionid2detailRDD) {
+        /**
+         * 第一步：将top10热门品类生成rdd
+         */
+        ArrayList<Tuple2<Long, Long>> top10CategoryIdList = new ArrayList<Tuple2<Long, Long>>();
+        for (Tuple2<CategorySortKey, String> tuple : top10CategoryList) {
+            Long categoryid = Long.valueOf(StringUtils.getFieldFromConcatString(tuple._2, "\\|", Constants.FIELD_CATEGORY_ID));
+            top10CategoryIdList.add(new Tuple2<Long, Long>(categoryid, categoryid));
+        }
+        JavaPairRDD<Long, Long> top10CategoryIdRDD = jsc.parallelizePairs(top10CategoryIdList);
+
+        /**
+         * 第二步：计算top10品类被各session点击的次数
+         */
+        JavaPairRDD<String, Iterable<Row>> sessionid2detailsRDD = sessionid2detailRDD.groupByKey();
+        JavaPairRDD<Long, String> categoryid2sessionCountRDD = sessionid2detailsRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<String, Iterable<Row>>, Long, String>() {
+            public Iterable<Tuple2<Long, String>> call(Tuple2<String, Iterable<Row>> tuple) throws Exception {
+                //Tuple2<categoryid1,sessionid1=3>
+                List<Tuple2<Long, String>> list = new ArrayList<Tuple2<Long, String>>();
+                String sessionid = tuple._1;
+                //HashMap<>(categoryid1,2)
+                Map<Long, Long> map = new HashMap<Long, Long>();
+                Iterator<Row> iterator = tuple._2.iterator();
+                while (iterator.hasNext()) {
+                    Row row = iterator.next();
+                    Object o = row.get(6);
+                    if (o != null) {
+                        Long categoryid = Long.valueOf(String.valueOf(o));
+                        Long count = map.get(categoryid);
+                        if (count == null) {
+                            count = 0L;
+                        }
+                        count++;
+
+                        map.put(categoryid, count);
+
+                    }
+
+                }
+                for (Map.Entry<Long, Long> entry : map.entrySet()) {
+                    Long key = entry.getKey();
+                    Long value = entry.getValue();
+                    String s = sessionid + "," + value;
+                    list.add(new Tuple2<Long, String>(key, s));
+                }
+
+                return list;
+            }
+        });
+
+        top10CategoryIdRDD.join(categoryid2sessionCountRDD).mapToPair(new PairFunction<Tuple2<Long, Tuple2<Long, String>>, Long, String>() {
+            public Tuple2<Long, String> call(Tuple2<Long, Tuple2<Long, String>> tuple) throws Exception {
+                return new Tuple2<Long, String>(tuple._1, tuple._2._2);
+
+
+            }
+        });
+
+    }
+
+
+    private static List<Tuple2<CategorySortKey, String>> getTopNCategory(Long taskid, JavaPairRDD<String, Row> sessionid2detailRDD) {
         System.out.println("getTopNCategory------------------------------------");
 
 
@@ -116,7 +187,7 @@ public class UserVisitSessionAnalyzeSpark {
             }
         });
         //去重
-        flat=flat.distinct();
+        flat = flat.distinct();
 
         /**
          * 第二步：计算各品类的点击、下单和支付的次数
@@ -181,6 +252,8 @@ public class UserVisitSessionAnalyzeSpark {
             top10CategoryDAO.inserrt(top10Category);
         }
 
+        return take;
+
 
     }
 
@@ -211,7 +284,7 @@ public class UserVisitSessionAnalyzeSpark {
                 if (count.isPresent()) {
                     clickCount = count.get();
                 }
-                String s = Constants.FIELD_CATEGORY_ID+"="+clickid+"|"+ Constants.FIELD_CLICK_COUNT + "=" + clickCount;
+                String s = Constants.FIELD_CATEGORY_ID + "=" + clickid + "|" + Constants.FIELD_CLICK_COUNT + "=" + clickCount;
                 return new Tuple2<Long, String>(clickid, s);
             }
         });
