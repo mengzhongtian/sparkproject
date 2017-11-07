@@ -63,6 +63,8 @@ public class UserVisitSessionAnalyzeSpark {
         JavaPairRDD<String, String> fiter = filterSession(sessionid2AggrInfoRDD, jsonObject, accumulator);
         System.out.println(fiter.count());
 
+        JavaPairRDD<String, Row> sessionid2detailRDD = getSessionid2detailRDD(fiter, stringRowJavaPairRDD);
+
         /**
          * 随机抽取session
          */
@@ -74,32 +76,18 @@ public class UserVisitSessionAnalyzeSpark {
          */
         calculateAnadPersistAggrStat(accumulator.value(), taskid);
 
-        getTopNCategory(taskid,fiter, stringRowJavaPairRDD);
+        getTopNCategory(taskid, sessionid2detailRDD);
 
         jsc.close();
     }
 
-    private static void getTopNCategory(Long taskid, JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+    private static void getTopNCategory(Long taskid, JavaPairRDD<String, Row> sessionid2detailRDD) {
         System.out.println("getTopNCategory------------------------------------");
-        /**
-         * 第一步：获取符合条件的session访问过的所有品类
-         */
-        //获取符合条件的session的详细信息
-        JavaPairRDD<String, Tuple2<String, Row>> join = fiter.join(stringRowJavaPairRDD);
-        JavaPairRDD<String, Row> RDD1 = join.mapToPair(new PairFunction<Tuple2<String, Tuple2<String, Row>>, String, Row>() {
-            public Tuple2<String, Row> call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
-                String sessionid = tuple._1;
-                Row row = tuple._2._2;
-                return new Tuple2<String, Row>(sessionid, row);
-
-
-            }
-        });
 
 
         //获取session访问过的所有品类id
 
-        JavaPairRDD<Long, Long> flat = RDD1.flatMapToPair(new PairFlatMapFunction<Tuple2<String, Row>, Long, Long>() {
+        JavaPairRDD<Long, Long> flat = sessionid2detailRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<String, Row>, Long, Long>() {
             public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> tuple) throws Exception {
 
                 List<Tuple2<Long, Long>> list = new ArrayList<Tuple2<Long, Long>>();
@@ -134,11 +122,11 @@ public class UserVisitSessionAnalyzeSpark {
          * 第二步：计算各品类的点击、下单和支付的次数
          */
         //计算各品类的点击次数
-        JavaPairRDD<Long, Long> clickCount = getClickCount(RDD1);
+        JavaPairRDD<Long, Long> clickCount = getClickCount(sessionid2detailRDD);
         //计算各个品类下单次数
-        JavaPairRDD<Long, Long> orderCount = getOrderCount(RDD1);
+        JavaPairRDD<Long, Long> orderCount = getOrderCount(sessionid2detailRDD);
         //计算各个品类支付次数
-        JavaPairRDD<Long, Long> payCount = getPayCount(RDD1);
+        JavaPairRDD<Long, Long> payCount = getPayCount(sessionid2detailRDD);
 
         /**
          * 第三步：join各品类与它的点击、下单和支付的次数
@@ -194,6 +182,23 @@ public class UserVisitSessionAnalyzeSpark {
         }
 
 
+    }
+
+    private static JavaPairRDD<String, Row> getSessionid2detailRDD(JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+        /**
+         * 第一步：获取符合条件的session访问过的所有品类
+         */
+        //获取符合条件的session的详细信息
+        JavaPairRDD<String, Tuple2<String, Row>> join = fiter.join(stringRowJavaPairRDD);
+        return join.mapToPair(new PairFunction<Tuple2<String, Tuple2<String, Row>>, String, Row>() {
+            public Tuple2<String, Row> call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
+                String sessionid = tuple._1;
+                Row row = tuple._2._2;
+                return new Tuple2<String, Row>(sessionid, row);
+
+
+            }
+        });
     }
 
     private static JavaPairRDD<Long, String> joinCount(JavaPairRDD<Long, Long> flat, JavaPairRDD<Long, Long> clickCount, JavaPairRDD<Long, Long> orderCount, JavaPairRDD<Long, Long> payCount) {
