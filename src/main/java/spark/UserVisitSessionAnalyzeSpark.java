@@ -19,6 +19,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
 import scala.Tuple2;
+import scala.tools.nsc.backend.icode.analysis.CopyPropagation;
 import test.MockData;
 import util.*;
 
@@ -60,7 +61,7 @@ public class UserVisitSessionAnalyzeSpark {
          * 筛选符合条件的session数据
          */
         JavaPairRDD<String, String> fiter = filterSession(sessionid2AggrInfoRDD, jsonObject, accumulator);
-        fiter.count();
+        System.out.println(fiter.count());
 
         /**
          * 随机抽取session
@@ -79,6 +80,7 @@ public class UserVisitSessionAnalyzeSpark {
     }
 
     private static void getTopNCategory(Long taskid, JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+        System.out.println("getTopNCategory------------------------------------");
         /**
          * 第一步：获取符合条件的session访问过的所有品类
          */
@@ -125,6 +127,8 @@ public class UserVisitSessionAnalyzeSpark {
                 return list;
             }
         });
+        //去重
+        flat=flat.distinct();
 
         /**
          * 第二步：计算各品类的点击、下单和支付的次数
@@ -202,7 +206,7 @@ public class UserVisitSessionAnalyzeSpark {
                 if (count.isPresent()) {
                     clickCount = count.get();
                 }
-                String s = Constants.FIELD_CLICK_COUNT + "=" + clickCount;
+                String s = Constants.FIELD_CATEGORY_ID+"="+clickid+"|"+ Constants.FIELD_CLICK_COUNT + "=" + clickCount;
                 return new Tuple2<Long, String>(clickid, s);
             }
         });
@@ -317,7 +321,7 @@ public class UserVisitSessionAnalyzeSpark {
         //排除点击的品类是空的情况
         JavaPairRDD<String, Row> filter = rdd1.filter(new Function<Tuple2<String, Row>, Boolean>() {
             public Boolean call(Tuple2<String, Row> v1) throws Exception {
-                Long click = v1._2.getLong(6);
+                Object click = v1._2.get(6);
                 return click == null ? false : true;
 
             }
