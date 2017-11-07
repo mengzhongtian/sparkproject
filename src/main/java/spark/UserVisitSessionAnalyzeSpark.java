@@ -149,6 +149,11 @@ public class UserVisitSessionAnalyzeSpark {
             }
         });
 
+        /**
+         * 分组取TopN算法实现，获取每个品类的top10活跃用户
+         */
+        //TODO 分组取TopN算法实现，获取每个品类的top10活跃用户
+
     }
 
 
