@@ -1,8 +1,10 @@
 package spark;
 
+import scala.Serializable;
+import scala.annotation.serializable;
 import scala.math.Ordered;
 
-public class CategorySortKey implements Ordered<CategorySortKey>{
+public class CategorySortKey implements Ordered<CategorySortKey>, Serializable{
     private long clickCount;
     private long orderCount;
     private long payCount;
