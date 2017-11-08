@@ -166,10 +166,10 @@ public class UserVisitSessionAnalyzeSpark {
                 }
 
                 while (iterator.hasNext()) {
-                    //next:"sessionid1,10"
-                    String next = iterator.next();
-                    stringArraySort(sessions, next);
+                    stringArraySort(sessions, iterator.next());
                 }
+                System.out.println(Arrays.toString(sessions));
+
                 List<Tuple2<String, String>> list = new ArrayList<Tuple2<String, String>>();
                 for (String sessionCount : sessions) {
                     String sessionid = sessionCount.split(",")[0];
@@ -182,11 +182,7 @@ public class UserVisitSessionAnalyzeSpark {
             }
 
         });
-        top10SessionRDD.foreach(new VoidFunction<Tuple2<String, String>>() {
-            public void call(Tuple2<String, String> tuple) throws Exception {
-                System.out.println(tuple._1);
-            }
-        });
+        top10SessionRDD.collect();
 
 
     }
