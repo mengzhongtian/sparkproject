@@ -18,6 +18,7 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
+import org.stringtemplate.v4.ST;
 import scala.Tuple2;
 import scala.collection.immutable.Stream;
 import test.MockData;
@@ -91,7 +92,7 @@ public class UserVisitSessionAnalyzeSpark {
         jsc.close();
     }
 
-    private static void getTop10Session(JavaSparkContext jsc, long task_id, List<Tuple2<CategorySortKey, String>> top10CategoryList, JavaPairRDD<String, Row> sessionid2detailRDD) {
+    private static void getTop10Session(JavaSparkContext jsc, long task_id, List<Tuple2<CategorySortKey, String>> top10CategoryList, final JavaPairRDD<String, Row> sessionid2detailRDD) {
         /**
          * 第一步：将top10热门品类生成rdd
          */
@@ -140,8 +141,8 @@ public class UserVisitSessionAnalyzeSpark {
                 return list;
             }
         });
-
-        top10CategoryIdRDD.join(categoryid2sessionCountRDD).mapToPair(new PairFunction<Tuple2<Long, Tuple2<Long, String>>, Long, String>() {
+        //Tuple2<categoryid1,sessionid1=3>
+        JavaPairRDD<Long, String> top10CategorySessionCountRDD = top10CategoryIdRDD.join(categoryid2sessionCountRDD).mapToPair(new PairFunction<Tuple2<Long, Tuple2<Long, String>>, Long, String>() {
             public Tuple2<Long, String> call(Tuple2<Long, Tuple2<Long, String>> tuple) throws Exception {
                 return new Tuple2<Long, String>(tuple._1, tuple._2._2);
 
@@ -153,6 +154,71 @@ public class UserVisitSessionAnalyzeSpark {
          * 分组取TopN算法实现，获取每个品类的top10活跃用户
          */
         //TODO 分组取TopN算法实现，获取每个品类的top10活跃用户
+
+        JavaPairRDD<Long, Iterable<String>> top10CategorySessionCountsRDD = top10CategorySessionCountRDD.groupByKey();
+        JavaPairRDD<String, String> top10SessionRDD = top10CategorySessionCountsRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<Long, Iterable<String>>, String, String>() {
+            public Iterable<Tuple2<String, String>> call(Tuple2<Long, Iterable<String>> tuple) throws Exception {
+                Long categoryid = tuple._1;
+                Iterator<String> iterator = tuple._2.iterator();
+                String[] sessions = new String[10];
+                for (int i = 0; i < 10; i++) {
+                    sessions[i] = "0,0";
+                }
+
+                while (iterator.hasNext()) {
+                    //next:"sessionid1,10"
+                    String next = iterator.next();
+                    stringArraySort(sessions, next);
+                }
+                List<Tuple2<String, String>> list = new ArrayList<Tuple2<String, String>>();
+                for (String sessionCount : sessions) {
+                    String sessionid = sessionCount.split(",")[0];
+                    String count = sessionCount.split(",")[1];
+                    list.add(new Tuple2<String, String>(sessionid, sessionid));
+                }
+                return list;
+
+
+            }
+
+        });
+        top10SessionRDD.foreach(new VoidFunction<Tuple2<String, String>>() {
+            public void call(Tuple2<String, String> tuple) throws Exception {
+                System.out.println(tuple._1);
+            }
+        });
+
+
+    }
+
+    /**
+     * @param "sessionid1,2","sessionid2,1" 从大到小有序的
+     * @param "sessionid3,3"
+     */
+    private static void stringArraySort(String[] array, String s) {
+        Long scount = Long.valueOf(s.split(",")[1]);
+        for (int i = 0; i < array.length; i++) {
+            Long count = Long.valueOf(array[i].split(",")[1]);
+            if (count >= scount) {
+                continue;
+            } else {
+                changeArray(array, s, i);
+                break;
+            }
+        }
+
+
+    }
+
+    private static void changeArray(String[] array, String s, int i) {
+        String temp;
+        for (; i < array.length; i++) {
+            temp = array[i];
+            array[i] = s;
+            s = temp;
+
+        }
+
 
     }
 
