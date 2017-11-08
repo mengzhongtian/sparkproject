@@ -14,6 +14,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
+import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
@@ -74,7 +75,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 随机抽取session
          */
-        randomExtractSession(ta.getTask_id(), fiter, stringRowJavaPairRDD);
+        randomExtractSession(jsc,ta.getTask_id(), fiter, stringRowJavaPairRDD);
 
 
         /**
@@ -521,7 +522,7 @@ public class UserVisitSessionAnalyzeSpark {
     }
 
 
-    private static void randomExtractSession(final long task_id, JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
+    private static void randomExtractSession(JavaSparkContext jsc, final long task_id, JavaPairRDD<String, String> fiter, JavaPairRDD<String, Row> stringRowJavaPairRDD) {
         System.out.println("运行randomExtractSession方法");
         Random random = new Random();
 
@@ -559,6 +560,7 @@ public class UserVisitSessionAnalyzeSpark {
         int extractNumberPerDay = ConfigurationManager.getInteger(Constants.EXTRACT_SESSION_NUMBER) / dateHourCountMap.size();
 
         final HashMap<String, Map<String, List<Integer>>> dateHourExtractMap = new HashMap<String, Map<String, List<Integer>>>();
+        final Broadcast<HashMap<String, Map<String, List<Integer>>>> broadcast = jsc.broadcast(dateHourExtractMap);
         //遍历dateHourCountMap，计算每时的ssion总数
         //for循环里，每次循环表示一天的数据
         for (Map.Entry<String, Map<String, Long>> dateHourCountEntry : dateHourCountMap.entrySet()) {
@@ -620,7 +622,8 @@ public class UserVisitSessionAnalyzeSpark {
                 String hour = dateHour.split("_")[1];
                 Iterator<String> iterator = tuple._2.iterator();
 
-                List<Integer> integers = dateHourExtractMap.get(day).get(hour);
+                HashMap<String, Map<String, List<Integer>>> value = broadcast.getValue();
+                List<Integer> integers = value.get(day).get(hour);
                 int index = 0;
 
                 SessionRandomExtractDao sessionRandomExtractDao = DAOFactory.getSessionRandomExtractDao();
