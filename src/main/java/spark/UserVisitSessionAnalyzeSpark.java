@@ -7,6 +7,8 @@ import constant.Constants;
 import dao.*;
 import dao.Factory.DAOFactory;
 import domain.*;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntList;
 import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
@@ -37,7 +39,7 @@ public class UserVisitSessionAnalyzeSpark {
         SparkConf conf = new SparkConf()
                 .setAppName(Constants.SPARK_APP_NAME_SESSION)
                 .setMaster("local")
-                .set("spark.serializer","org.apache.spark.serializer.KryoSerializer")
+                .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
                 .registerKryoClasses(new Class[]{CategorySortKey.class});
 
         JavaSparkContext jsc = new JavaSparkContext(conf);
@@ -77,7 +79,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 随机抽取session
          */
-        randomExtractSession(jsc,ta.getTask_id(), fiter, stringRowJavaPairRDD);
+        randomExtractSession(jsc, ta.getTask_id(), fiter, stringRowJavaPairRDD);
 
 
         /**
@@ -561,8 +563,7 @@ public class UserVisitSessionAnalyzeSpark {
          */
         int extractNumberPerDay = ConfigurationManager.getInteger(Constants.EXTRACT_SESSION_NUMBER) / dateHourCountMap.size();
 
-        final HashMap<String, Map<String, List<Integer>>> dateHourExtractMap = new HashMap<String, Map<String, List<Integer>>>();
-
+        HashMap<String, Map<String, IntList>> dateHourExtractMap = new HashMap<String, Map<String, IntList>>();
         //遍历dateHourCountMap，计算每时的ssion总数
         //for循环里，每次循环表示一天的数据
         for (Map.Entry<String, Map<String, Long>> dateHourCountEntry : dateHourCountMap.entrySet()) {
@@ -574,10 +575,10 @@ public class UserVisitSessionAnalyzeSpark {
 
             }
             //获取改天的信息
-            Map<String, List<Integer>> hourExtractMap = dateHourExtractMap.get(day);
+            Map<String, IntList> hourExtractMap = dateHourExtractMap.get(day);
             //判断为空的情况
             if (hourExtractMap == null) {
-                hourExtractMap = new HashMap<String, List<Integer>>();
+                hourExtractMap = new HashMap<String, IntList>();
                 //存进集合里
                 dateHourExtractMap.put(day, hourExtractMap);
             }
@@ -590,9 +591,9 @@ public class UserVisitSessionAnalyzeSpark {
                 if (hourExtractNumber > co) {
                     hourExtractNumber = co;
                 }
-                List<Integer> integers = hourExtractMap.get(hour);
+                IntList integers = hourExtractMap.get(hour);
                 if (integers == null) {
-                    integers = new ArrayList<Integer>();
+                    integers = new IntArrayList();
                     hourExtractMap.put(hour, integers);
                 }
                 for (int i = 0; i < hourExtractNumber; i++) {
@@ -610,7 +611,9 @@ public class UserVisitSessionAnalyzeSpark {
 
         }
 
-        final Broadcast<HashMap<String, Map<String, List<Integer>>>> broadcast = jsc.broadcast(dateHourExtractMap);
+
+//        final Broadcast<HashMap<String, Map<String, List<Integer>>>> broadcast = jsc.broadcast(dateHourExtractMap);
+        final Broadcast<HashMap<String, Map<String, IntList>>> broadcast = jsc.broadcast(dateHourExtractMap);
 
         /**
          * 第三部，提取session
@@ -626,7 +629,7 @@ public class UserVisitSessionAnalyzeSpark {
                 String hour = dateHour.split("_")[1];
                 Iterator<String> iterator = tuple._2.iterator();
 
-                HashMap<String, Map<String, List<Integer>>> value = broadcast.getValue();
+                HashMap<String, Map<String, IntList>> value = broadcast.getValue();
                 List<Integer> integers = value.get(day).get(hour);
                 int index = 0;
 
@@ -752,6 +755,7 @@ public class UserVisitSessionAnalyzeSpark {
         double step_length_60_ratio = NumberUtils.formatDouble(
                 (double) step_length_60 / (double) session_count, 2);
         SessionAggrStat sessionAggrStat = new SessionAggrStat();
+        sessionAggrStat.setTaskid(taskid);
         sessionAggrStat.setSession_count(session_count);
         sessionAggrStat.setVisit_length_1s_3s_ratio(visit_length_1s_3s_ratio);
         sessionAggrStat.setVisit_length_4s_6s_ratio(visit_length_4s_6s_ratio);
