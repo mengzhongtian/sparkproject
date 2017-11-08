@@ -18,6 +18,7 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
+import org.apache.spark.storage.StorageLevel;
 import org.stringtemplate.v4.ST;
 import scala.Tuple2;
 import scala.collection.immutable.Stream;
@@ -47,12 +48,15 @@ public class UserVisitSessionAnalyzeSpark {
         Task ta = task.findById(taskid);
         JSONObject jsonObject = JSONObject.parseObject(ta.getTask_param());
         JavaRDD<Row> row = getActionRDDByDataRange(sqlContext, jsonObject);
+        row.persist(StorageLevel.MEMORY_ONLY());
         /**
          * 原始RDD
          */
         JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
+        stringRowJavaPairRDD.cache();
 
         JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(sqlContext, row);
+        sessionid2AggrInfoRDD.cache();
         Accumulator<String> accumulator = jsc.accumulator("", new SessionAggrStatAccumulator());
 
         sessionid2AggrInfoRDD.count();
@@ -62,9 +66,10 @@ public class UserVisitSessionAnalyzeSpark {
          * 筛选符合条件的session数据
          */
         JavaPairRDD<String, String> fiter = filterSession(sessionid2AggrInfoRDD, jsonObject, accumulator);
-        System.out.println(fiter.count());
+        fiter.cache();
 
         JavaPairRDD<String, Row> sessionid2detailRDD = getSessionid2detailRDD(fiter, stringRowJavaPairRDD);
+        sessionid2detailRDD.cache();
 
         /**
          * 随机抽取session
@@ -187,7 +192,6 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 最后一步：获取top10活跃session的明细数据，并写入MySQL
          */
-        //TODO
         JavaPairRDD<String, Tuple2<String, Row>> join = top10SessionRDD.join(sessionid2detailRDD);
         join.foreach(new VoidFunction<Tuple2<String, Tuple2<String, Row>>>() {
             public void call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
