@@ -153,7 +153,6 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 分组取TopN算法实现，获取每个品类的top10活跃用户
          */
-        //TODO 分组取TopN算法实现，获取每个品类的top10活跃用户
 
         JavaPairRDD<Long, Iterable<String>> top10CategorySessionCountsRDD = top10CategorySessionCountRDD.groupByKey();
         JavaPairRDD<String, String> top10SessionRDD = top10CategorySessionCountsRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<Long, Iterable<String>>, String, String>() {
@@ -168,7 +167,6 @@ public class UserVisitSessionAnalyzeSpark {
                 while (iterator.hasNext()) {
                     stringArraySort(sessions, iterator.next());
                 }
-                System.out.println(Arrays.toString(sessions));
 
                 List<Tuple2<String, String>> list = new ArrayList<Tuple2<String, String>>();
                 Top10CategorySessionDAO top10CategorySessionDAO = DAOFactory.getTop10CategorySessionDAO();
@@ -185,7 +183,34 @@ public class UserVisitSessionAnalyzeSpark {
             }
 
         });
-        top10SessionRDD.collect();
+
+        /**
+         * 最后一步：获取top10活跃session的明细数据，并写入MySQL
+         */
+        //TODO
+        JavaPairRDD<String, Tuple2<String, Row>> join = top10SessionRDD.join(sessionid2detailRDD);
+        join.foreach(new VoidFunction<Tuple2<String, Tuple2<String, Row>>>() {
+            public void call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
+                Row row = tuple._2._2;
+                SessionDetail sessionDetail = new SessionDetail();
+                sessionDetail.setTaskid(task_id);
+                sessionDetail.setUserid(row.getLong(1));
+                sessionDetail.setSessionid(row.getString(2));
+                sessionDetail.setPageid(row.getLong(3));
+                sessionDetail.setActionTime(row.getString(4));
+                sessionDetail.setSearchKeyword(row.getString(5));
+                sessionDetail.setClickCategoryId(row.getLong(6));
+                sessionDetail.setClickProductId(row.getLong(7));
+                sessionDetail.setOrderCategoryIds(row.getString(8));
+                sessionDetail.setOrderProductIds(row.getString(9));
+                sessionDetail.setPayCategoryIds(row.getString(10));
+                sessionDetail.setPayProductIds(row.getString(11));
+
+                SessionDetailDao sessionDetailDAO = DAOFactory.getSessionDetailDao();
+                sessionDetailDAO.insert(sessionDetail);
+
+            }
+        });
 
 
     }
@@ -232,7 +257,6 @@ public class UserVisitSessionAnalyzeSpark {
             public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> tuple) throws Exception {
 
                 List<Tuple2<Long, Long>> list = new ArrayList<Tuple2<Long, Long>>();
-                String sessionid = tuple._1;
                 Row row = tuple._2;
                 Long click = row.getLong(6);
                 if (click != null) {
