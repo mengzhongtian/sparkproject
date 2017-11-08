@@ -562,7 +562,7 @@ public class UserVisitSessionAnalyzeSpark {
         int extractNumberPerDay = ConfigurationManager.getInteger(Constants.EXTRACT_SESSION_NUMBER) / dateHourCountMap.size();
 
         final HashMap<String, Map<String, List<Integer>>> dateHourExtractMap = new HashMap<String, Map<String, List<Integer>>>();
-        final Broadcast<HashMap<String, Map<String, List<Integer>>>> broadcast = jsc.broadcast(dateHourExtractMap);
+
         //遍历dateHourCountMap，计算每时的ssion总数
         //for循环里，每次循环表示一天的数据
         for (Map.Entry<String, Map<String, Long>> dateHourCountEntry : dateHourCountMap.entrySet()) {
@@ -609,6 +609,8 @@ public class UserVisitSessionAnalyzeSpark {
 
 
         }
+
+        final Broadcast<HashMap<String, Map<String, List<Integer>>>> broadcast = jsc.broadcast(dateHourExtractMap);
 
         /**
          * 第三部，提取session
