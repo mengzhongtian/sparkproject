@@ -36,7 +36,9 @@ public class UserVisitSessionAnalyzeSpark {
         //构建上下文：
         SparkConf conf = new SparkConf()
                 .setAppName(Constants.SPARK_APP_NAME_SESSION)
-                .setMaster("local");
+                .setMaster("local")
+                .set("spark.serializer","org.apache.spark.serializer.KryoSerializer")
+                .registerKryoClasses(new Class[]{CategorySortKey.class});
 
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = getSQLContext(jsc.sc());
