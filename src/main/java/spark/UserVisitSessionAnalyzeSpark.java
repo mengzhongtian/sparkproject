@@ -92,7 +92,7 @@ public class UserVisitSessionAnalyzeSpark {
         jsc.close();
     }
 
-    private static void getTop10Session(JavaSparkContext jsc, long task_id, List<Tuple2<CategorySortKey, String>> top10CategoryList, final JavaPairRDD<String, Row> sessionid2detailRDD) {
+    private static void getTop10Session(JavaSparkContext jsc, final long task_id, List<Tuple2<CategorySortKey, String>> top10CategoryList, final JavaPairRDD<String, Row> sessionid2detailRDD) {
         /**
          * 第一步：将top10热门品类生成rdd
          */
@@ -171,9 +171,12 @@ public class UserVisitSessionAnalyzeSpark {
                 System.out.println(Arrays.toString(sessions));
 
                 List<Tuple2<String, String>> list = new ArrayList<Tuple2<String, String>>();
+                Top10CategorySessionDAO top10CategorySessionDAO = DAOFactory.getTop10CategorySessionDAO();
                 for (String sessionCount : sessions) {
                     String sessionid = sessionCount.split(",")[0];
                     String count = sessionCount.split(",")[1];
+                    Top10CategorySession top10CategorySession = new Top10CategorySession(task_id, categoryid, sessionid, count);
+                    top10CategorySessionDAO.insert(top10CategorySession);
                     list.add(new Tuple2<String, String>(sessionid, sessionid));
                 }
                 return list;
