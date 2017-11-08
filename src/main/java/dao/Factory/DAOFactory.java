@@ -24,4 +24,7 @@ public class DAOFactory {
     public static Top10CategoryDAO getTop10CategoryDAO(){
         return new Top10CategoryDaoImpl();
     }
+    public static Top10CategorySessionDAO getTop10CategorySessionDAO(){
+        return new Top10CategorySessionDAOImpl();
+    }
 }
