@@ -198,7 +198,36 @@ public class UserVisitSessionAnalyzeSpark {
          * 最后一步：获取top10活跃session的明细数据，并写入MySQL
          */
         JavaPairRDD<String, Tuple2<String, Row>> join = top10SessionRDD.join(sessionid2detailRDD);
-        join.foreach(new VoidFunction<Tuple2<String, Tuple2<String, Row>>>() {
+        join.foreachPartition(new VoidFunction<Iterator<Tuple2<String, Tuple2<String, Row>>>>() {
+            public void call(Iterator<Tuple2<String, Tuple2<String, Row>>> iterator) throws Exception {
+                List<SessionDetail> list = new ArrayList<SessionDetail>();
+
+                while (iterator.hasNext()) {
+                    Tuple2<String, Tuple2<String, Row>> tuple = iterator.next();
+                    Row row = tuple._2._2;
+                    SessionDetail sessionDetail = new SessionDetail();
+                    sessionDetail.setTaskid(task_id);
+                    sessionDetail.setUserid(row.getLong(1));
+                    sessionDetail.setSessionid(row.getString(2));
+                    sessionDetail.setPageid(row.getLong(3));
+                    sessionDetail.setActionTime(row.getString(4));
+                    sessionDetail.setSearchKeyword(row.getString(5));
+                    sessionDetail.setClickCategoryId(row.getLong(6));
+                    sessionDetail.setClickProductId(row.getLong(7));
+                    sessionDetail.setOrderCategoryIds(row.getString(8));
+                    sessionDetail.setOrderProductIds(row.getString(9));
+                    sessionDetail.setPayCategoryIds(row.getString(10));
+                    sessionDetail.setPayProductIds(row.getString(11));
+                    list.add(sessionDetail);
+                }
+                SessionDetailDao sessionDetailDAO = DAOFactory.getSessionDetailDao();
+                sessionDetailDAO.insertBatch(list);
+
+
+            }
+        });
+
+/*        join.foreach(new VoidFunction<Tuple2<String, Tuple2<String, Row>>>() {
             public void call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
                 Row row = tuple._2._2;
                 SessionDetail sessionDetail = new SessionDetail();
@@ -219,7 +248,7 @@ public class UserVisitSessionAnalyzeSpark {
                 sessionDetailDAO.insert(sessionDetail);
 
             }
-        });
+        });*/
 
 
     }
