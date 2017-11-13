@@ -512,13 +512,16 @@ public class UserVisitSessionAnalyzeSpark {
             }
         });
 
+/*        JavaPairRDD<Long, Long> resultRDD = flatMap.reduceByKey(new Function2<Long, Long, Long>() {
+            public Long call(Long v1, Long v2) throws Exception {
+                return v1 + v2;
+            }
+        });*/
         JavaPairRDD<Long, Long> resultRDD = flatMap.reduceByKey(new Function2<Long, Long, Long>() {
             public Long call(Long v1, Long v2) throws Exception {
                 return v1 + v2;
             }
-        });
-
-
+        }, 1000);
         return resultRDD;
 
 
