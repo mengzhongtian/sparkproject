@@ -549,17 +549,17 @@ public class UserVisitSessionAnalyzeSpark {
                 return new Tuple2<Long, Long>(clickid, 1L);
             }
         });
-/*        JavaPairRDD<Long, Long> resultRDD = map.reduceByKey(new Function2<Long, Long, Long>() {
+        JavaPairRDD<Long, Long> resultRDD = map.reduceByKey(new Function2<Long, Long, Long>() {
             public Long call(Long v1, Long v2) throws Exception {
                 return v1 + v2;
 
             }
-        });*/
+        });
         /**
          * 双重reduce聚合：
          */
 
-        JavaPairRDD<String, Long> reslt = map.mapToPair(new PairFunction<Tuple2<Long, Long>, String, Long>() {
+       /* JavaPairRDD<String, Long> reslt = map.mapToPair(new PairFunction<Tuple2<Long, Long>, String, Long>() {
             public Tuple2<String, Long> call(Tuple2<Long, Long> tuple) throws Exception {
                 Random random = new Random();
                 return new Tuple2<String, Long>(random.nextInt(10) + "_" + tuple._1, tuple._2);
@@ -582,7 +582,7 @@ public class UserVisitSessionAnalyzeSpark {
             public Long call(Long v1, Long v2) throws Exception {
                 return v1 + v2;
             }
-        });
+        });*/
 
 
         return resultRDD;
