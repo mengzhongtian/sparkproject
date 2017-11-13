@@ -22,9 +22,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.storage.StorageLevel;
-import org.stringtemplate.v4.ST;
 import scala.Tuple2;
-import scala.collection.immutable.Stream;
 import test.MockData;
 import util.*;
 
@@ -1005,20 +1003,31 @@ public class UserVisitSessionAnalyzeSpark {
         }
 
         final Broadcast<HashMap<Long, Row>> broadcast = jsc.broadcast(userInfoMap);
-        JavaPairRDD<Long, Tuple2<String, Row>> userid2FullInfoRDD = userid2PartAggrInfoRDD.mapToPair(new PairFunction<Tuple2<Long, String>, Long, Tuple2<String, Row>>() {
-            public Tuple2<Long, Tuple2<String, Row>> call(Tuple2<Long, String> tuple2) throws Exception {
-
+        JavaPairRDD<String, String> stringStringJavaPairRDD = userid2PartAggrInfoRDD.mapToPair(new PairFunction<Tuple2<Long, String>, String, String>() {
+            public Tuple2<String, String> call(Tuple2<Long, String> tuple) throws Exception {
                 HashMap<Long, Row> userInfo = broadcast.getValue();
 
 
-                Long aLong = tuple2._1;
-                Row row = userInfo.get(aLong);
-                return new Tuple2<Long, Tuple2<String, Row>>(aLong, new Tuple2<String, Row>(tuple2._2, row));
+                Long userid = tuple._1;
+                String partAggrInfo = tuple._2;
+                String sessionid = StringUtils.getFieldFromConcatString(partAggrInfo, "\\|", Constants.FIELD_SESSION_ID);
+                Row row = userInfo.get(userid);
+                int age = row.getInt(3);
+                String professional = row.getString(4);
+                String city = row.getString(5);
+                String sex = row.getString(6);
+                String full = partAggrInfo + "|"
+                        + Constants.FIELD_CITY + "=" + city + "|"
+                        + Constants.FIELD_SEX + "=" + sex + "|"
+                        + Constants.FIELD_AGE + "=" + age + "|"
+                        + Constants.FIELD_PROFESSIONAL + "=" + professional;
+
+                return new Tuple2<String, String>(sessionid, full);
             }
         });
 
 
-        JavaPairRDD<String, String> stringStringJavaPairRDD = userid2FullInfoRDD.mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>() {
+        /*JavaPairRDD<String, String> stringStringJavaPairRDD = userid2FullInfoRDD.mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>() {
             public Tuple2<String, String> call(Tuple2<Long, Tuple2<String, Row>> longTuple2Tuple2) throws Exception {
 
                 Long userid = longTuple2Tuple2._1;
@@ -1039,7 +1048,7 @@ public class UserVisitSessionAnalyzeSpark {
                 return new Tuple2<String, String>(sessionid, full);
 
             }
-        });
+        });*/
         return stringStringJavaPairRDD;
 
 
