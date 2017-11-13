@@ -43,6 +43,8 @@ public class UserVisitSessionAnalyzeSpark {
                 .registerKryoClasses(new Class[]{CategorySortKey.class});
 
         JavaSparkContext jsc = new JavaSparkContext(conf);
+        //设置checkpoint文件
+//        jsc.checkpointFile("1.file");
         SQLContext sqlContext = getSQLContext(jsc.sc());
 
         //生成模拟数据
@@ -59,6 +61,7 @@ public class UserVisitSessionAnalyzeSpark {
          */
         JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
         stringRowJavaPairRDD.cache();
+//        stringRowJavaPairRDD.checkpoint();
 
         JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(sqlContext, row);
         sessionid2AggrInfoRDD.cache();
