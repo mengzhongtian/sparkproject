@@ -63,7 +63,7 @@ public class UserVisitSessionAnalyzeSpark {
         stringRowJavaPairRDD.cache();
 //        stringRowJavaPairRDD.checkpoint();
 
-        JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(sqlContext, row);
+        JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(jsc,sqlContext, row);
         sessionid2AggrInfoRDD.cache();
         Accumulator<String> accumulator = jsc.accumulator("", new SessionAggrStatAccumulator());
 
@@ -899,11 +899,13 @@ public class UserVisitSessionAnalyzeSpark {
     /**
      * 聚合
      *
+     *
+     * @param jsc
      * @param sqlContext
      * @param actionRDD
      * @return
      */
-    private static JavaPairRDD<String, String> aggregateBySession(SQLContext sqlContext, JavaRDD<Row> actionRDD) {
+    private static JavaPairRDD<String, String> aggregateBySession(JavaSparkContext jsc, SQLContext sqlContext, JavaRDD<Row> actionRDD) {
 
         /**
          * 按照sessionId排序
@@ -992,7 +994,30 @@ public class UserVisitSessionAnalyzeSpark {
          * 用户数据与session数据进行join
          */
 
-        JavaPairRDD<Long, Tuple2<String, Row>> userid2FullInfoRDD = userid2PartAggrInfoRDD.join(userid2InfoRDD);
+//        JavaPairRDD<Long, Tuple2<String, Row>> userid2FullInfoRDD = userid2PartAggrInfoRDD.join(userid2InfoRDD);
+        /**
+         * reduce join 转换为map join
+         */
+        List<Tuple2<Long, Row>> collect = userid2InfoRDD.collect();
+        HashMap<Long, Row> userInfoMap = new HashMap<Long, Row>();
+        for (Tuple2<Long, Row> tuple : collect) {
+            userInfoMap.put(tuple._1, tuple._2);
+        }
+
+        final Broadcast<HashMap<Long, Row>> broadcast = jsc.broadcast(userInfoMap);
+        JavaPairRDD<Long, Tuple2<String, Row>> userid2FullInfoRDD = userid2PartAggrInfoRDD.mapToPair(new PairFunction<Tuple2<Long, String>, Long, Tuple2<String, Row>>() {
+            public Tuple2<Long, Tuple2<String, Row>> call(Tuple2<Long, String> tuple2) throws Exception {
+
+                HashMap<Long, Row> userInfo = broadcast.getValue();
+
+
+                Long aLong = tuple2._1;
+                Row row = userInfo.get(aLong);
+                return new Tuple2<Long, Tuple2<String, Row>>(aLong, new Tuple2<String, Row>(tuple2._2, row));
+            }
+        });
+
+
         JavaPairRDD<String, String> stringStringJavaPairRDD = userid2FullInfoRDD.mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>() {
             public Tuple2<String, String> call(Tuple2<Long, Tuple2<String, Row>> longTuple2Tuple2) throws Exception {
 
