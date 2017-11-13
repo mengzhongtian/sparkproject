@@ -20,6 +20,7 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.catalyst.expressions.Rand;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.storage.StorageLevel;
 import scala.Tuple2;
@@ -61,7 +62,7 @@ public class UserVisitSessionAnalyzeSpark {
         stringRowJavaPairRDD.cache();
 //        stringRowJavaPairRDD.checkpoint();
 
-        JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(jsc,sqlContext, row);
+        JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(jsc, sqlContext, row);
         sessionid2AggrInfoRDD.cache();
         Accumulator<String> accumulator = jsc.accumulator("", new SessionAggrStatAccumulator());
 
@@ -897,7 +898,6 @@ public class UserVisitSessionAnalyzeSpark {
     /**
      * 聚合
      *
-     *
      * @param jsc
      * @param sqlContext
      * @param actionRDD
@@ -996,7 +996,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * reduce join 转换为map join
          */
-        List<Tuple2<Long, Row>> collect = userid2InfoRDD.collect();
+        /*List<Tuple2<Long, Row>> collect = userid2InfoRDD.collect();
         HashMap<Long, Row> userInfoMap = new HashMap<Long, Row>();
         for (Tuple2<Long, Row> tuple : collect) {
             userInfoMap.put(tuple._1, tuple._2);
@@ -1024,7 +1024,7 @@ public class UserVisitSessionAnalyzeSpark {
 
                 return new Tuple2<String, String>(sessionid, full);
             }
-        });
+        });*/
 
 
         /*JavaPairRDD<String, String> stringStringJavaPairRDD = userid2FullInfoRDD.mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>() {
@@ -1049,6 +1049,109 @@ public class UserVisitSessionAnalyzeSpark {
 
             }
         });*/
+
+        /**
+         * sample采样倾斜key单独进行join
+         */
+        JavaPairRDD<Long, String> sampleRDD = userid2PartAggrInfoRDD.sample(false, 0.1, 9);
+        JavaPairRDD<Long, Long> mappedSampledRDD = sampleRDD.mapToPair(new PairFunction<Tuple2<Long, String>, Long, Long>() {
+            public Tuple2<Long, Long> call(Tuple2<Long, String> longStringTuple2) throws Exception {
+                return new Tuple2<Long, Long>(longStringTuple2._1, 1L);
+            }
+        });
+        JavaPairRDD<Long, Long> computedSampledRDD = mappedSampledRDD.reduceByKey(new Function2<Long, Long, Long>() {
+            public Long call(Long v1, Long v2) throws Exception {
+                return v1 + v2;
+            }
+        });
+
+        JavaPairRDD<Long, Long> reversedSampledRDD = computedSampledRDD.mapToPair(new PairFunction<Tuple2<Long, Long>, Long, Long>() {
+            public Tuple2<Long, Long> call(Tuple2<Long, Long> longLongTuple2) throws Exception {
+                return new Tuple2<Long, Long>(longLongTuple2._2, longLongTuple2._1);
+            }
+        });
+        List<Tuple2<Long, Long>> take = reversedSampledRDD.sortByKey(false).take(1);
+        final Long skewedUserid = take.get(0)._2;
+        System.out.println("----------------------------");
+        System.out.println(skewedUserid);
+
+
+
+        final JavaPairRDD<Long, String> skewedRDD = userid2PartAggrInfoRDD.filter(new Function<Tuple2<Long, String>, Boolean>() {
+            public Boolean call(Tuple2<Long, String> v1) throws Exception {
+                return v1._1.equals(skewedUserid);
+
+            }
+        });
+        JavaPairRDD<Long, String> commonRDD = userid2PartAggrInfoRDD.filter(new Function<Tuple2<Long, String>, Boolean>() {
+            public Boolean call(Tuple2<Long, String> v1) throws Exception {
+                return !v1._1.equals(skewedUserid);
+            }
+        });
+
+        JavaPairRDD<Long, Row> filter = userid2InfoRDD.filter(new Function<Tuple2<Long, Row>, Boolean>() {
+            public Boolean call(Tuple2<Long, Row> v1) throws Exception {
+                return v1._1.equals(skewedUserid);
+            }
+        });
+        JavaPairRDD<String, Row> skewedUserid2infoRDD = filter.flatMapToPair(new PairFlatMapFunction<Tuple2<Long, Row>, String, Row>() {
+            public Iterable<Tuple2<String, Row>> call(Tuple2<Long, Row> tuple) throws Exception {
+                List<Tuple2<String, Row>> list = new ArrayList<Tuple2<String, Row>>();
+                Random random = new Random();
+                for (int i = 0; i < 100; i++) {
+                    String prefix = random.nextInt(100) + "_" + tuple._1;
+                    list.add(new Tuple2<String, Row>(prefix, tuple._2));
+
+                }
+                return list;
+            }
+        });
+        skewedUserid2infoRDD.collect();
+
+        JavaPairRDD<Long, Tuple2<String, Row>> joinedRDD1 = skewedRDD.mapToPair(new PairFunction<Tuple2<Long, String>, String, String>() {
+            public Tuple2<String, String> call(Tuple2<Long, String> tuple) throws Exception {
+                Random random = new Random();
+                return new Tuple2<String, String>(random.nextInt(100) + "_" + tuple._1, tuple._2);
+
+
+            }
+        }).join(skewedUserid2infoRDD).mapToPair(new PairFunction<Tuple2<String, Tuple2<String, Row>>, Long, Tuple2<String, Row>>() {
+            public Tuple2<Long, Tuple2<String, Row>> call(Tuple2<String, Tuple2<String, Row>> tuple) throws Exception {
+                Long s = Long.valueOf(tuple._1.split("_")[1]);
+                return new Tuple2<Long, Tuple2<String, Row>>(s, tuple._2);
+
+
+            }
+        });
+
+        JavaPairRDD<Long, Tuple2<String, Row>> joinedRDD2 = commonRDD.join(userid2InfoRDD);
+        JavaPairRDD<Long, Tuple2<String, Row>> union = joinedRDD1.union(joinedRDD2);
+
+
+        JavaPairRDD<String, String> stringStringJavaPairRDD = union.mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>() {
+            public Tuple2<String, String> call(Tuple2<Long, Tuple2<String, Row>> longTuple2Tuple2) throws Exception {
+
+                Long userid = longTuple2Tuple2._1;
+                Tuple2<String, Row> stringRowTuple2 = longTuple2Tuple2._2;
+                Row row = stringRowTuple2._2();
+                String partAggrInfo = stringRowTuple2._1();
+                String sessionid = StringUtils.getFieldFromConcatString(partAggrInfo, "\\|", Constants.FIELD_SESSION_ID);
+
+                int age = row.getInt(3);
+                String professional = row.getString(4);
+                String city = row.getString(5);
+                String sex = row.getString(6);
+                String full = partAggrInfo + "|"
+                        + Constants.FIELD_CITY + "=" + city + "|"
+                        + Constants.FIELD_SEX + "=" + sex + "|"
+                        + Constants.FIELD_AGE + "=" + age + "|"
+                        + Constants.FIELD_PROFESSIONAL + "=" + professional;
+                return new Tuple2<String, String>(sessionid, full);
+
+            }
+        });
+
+
         return stringStringJavaPairRDD;
 
 
