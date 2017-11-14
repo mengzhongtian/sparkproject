@@ -1,7 +1,6 @@
-package spark;
+package spark.session;
 
 import scala.Serializable;
-import scala.annotation.serializable;
 import scala.math.Ordered;
 
 public class CategorySortKey implements Ordered<CategorySortKey>, Serializable{

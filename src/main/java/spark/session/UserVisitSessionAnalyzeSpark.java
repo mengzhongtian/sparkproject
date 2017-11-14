@@ -1,4 +1,4 @@
-package spark;
+package spark.session;
 
 import com.alibaba.fastjson.JSONObject;
 import com.google.common.base.Optional;
@@ -20,11 +20,9 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.catalyst.expressions.Rand;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.storage.StorageLevel;
 import scala.Tuple2;
-import scala.annotation.meta.param;
 import test.MockData;
 import util.*;
 
@@ -38,17 +36,17 @@ public class UserVisitSessionAnalyzeSpark {
         //构建上下文：
         SparkConf conf = new SparkConf()
                 .setAppName(Constants.SPARK_APP_NAME_SESSION)
-                .setMaster("local")
                 .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
                 .registerKryoClasses(new Class[]{CategorySortKey.class});
+        SparkUtils.setMaster(conf);
 
         JavaSparkContext jsc = new JavaSparkContext(conf);
         //设置checkpoint文件
-//        jsc.checkpointFile("1.file");
-        SQLContext sqlContext = getSQLContext(jsc.sc());
+        //jsc.checkpointFile("1.file");
+        SQLContext sqlContext = SparkUtils.getSQLContext(jsc.sc());
 
         //生成模拟数据
-        mockData(jsc, sqlContext);
+        SparkUtils.mockData(jsc,sqlContext);
 
         TaskDao task = DAOFactory.getTask();
         Long taskid = ParamUtils.getTaskIdFromArgs(args);
@@ -61,7 +59,7 @@ public class UserVisitSessionAnalyzeSpark {
          */
         JavaPairRDD<String, Row> stringRowJavaPairRDD = getSessionid2ActionRDD(row);
         stringRowJavaPairRDD.cache();
-//        stringRowJavaPairRDD.checkpoint();
+        //stringRowJavaPairRDD.checkpoint();
 
         JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(jsc, sqlContext, row);
         sessionid2AggrInfoRDD.cache();
@@ -845,33 +843,8 @@ public class UserVisitSessionAnalyzeSpark {
 
     }
 
-    /**
-     * 获取SQLContext
-     * 如果是在本地测试的话就生成SQLContext
-     * 如果是在生产环境的话，就生成HiveContext
-     *
-     * @param sc
-     * @return
-     */
-    private static SQLContext getSQLContext(SparkContext sc) {
-        boolean local = ConfigurationManager.getBoolean(Constants.SPARK_LOCAL);
-        if (local) {
-            return new SQLContext(sc);
-        } else {
-            return new HiveContext(sc);
-        }
 
-    }
 
-    /**
-     * 生成模拟数据
-     */
-    private static void mockData(JavaSparkContext jsc, SQLContext sqlContext) {
-        boolean local = ConfigurationManager.getBoolean(Constants.SPARK_LOCAL);
-        if (local) {
-            MockData.mock(jsc, sqlContext);
-        }
-    }
 
     /**
      * 获取指定日期范围内的用户访问行为数据
@@ -1190,7 +1163,7 @@ public class UserVisitSessionAnalyzeSpark {
             @Override
             public Tuple2<Long, Tuple2<String, Row>> call(Tuple2<String, Tuple2<String, Row>> stringTuple2Tuple2) throws Exception {
 
-                return new Tuple2<Long, Tuple2<String, Row>>(Long.valueOf(stringTuple2Tuple2._1.split("_")[1]),stringTuple2Tuple2._2);
+                return new Tuple2<Long, Tuple2<String, Row>>(Long.valueOf(stringTuple2Tuple2._1.split("_")[1]), stringTuple2Tuple2._2);
 
 
             }
