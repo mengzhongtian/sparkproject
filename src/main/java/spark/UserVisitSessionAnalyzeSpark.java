@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Rand;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.storage.StorageLevel;
 import scala.Tuple2;
+import scala.annotation.meta.param;
 import test.MockData;
 import util.*;
 
@@ -1053,7 +1054,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * sample采样倾斜key单独进行join
          */
-        JavaPairRDD<Long, String> sampleRDD = userid2PartAggrInfoRDD.sample(false, 0.1, 9);
+        /*JavaPairRDD<Long, String> sampleRDD = userid2PartAggrInfoRDD.sample(false, 0.1, 9);
         JavaPairRDD<Long, Long> mappedSampledRDD = sampleRDD.mapToPair(new PairFunction<Tuple2<Long, String>, Long, Long>() {
             public Tuple2<Long, Long> call(Tuple2<Long, String> longStringTuple2) throws Exception {
                 return new Tuple2<Long, Long>(longStringTuple2._1, 1L);
@@ -1129,6 +1130,73 @@ public class UserVisitSessionAnalyzeSpark {
 
 
         JavaPairRDD<String, String> stringStringJavaPairRDD = union.mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>() {
+            public Tuple2<String, String> call(Tuple2<Long, Tuple2<String, Row>> longTuple2Tuple2) throws Exception {
+
+                Long userid = longTuple2Tuple2._1;
+                Tuple2<String, Row> stringRowTuple2 = longTuple2Tuple2._2;
+                Row row = stringRowTuple2._2();
+                String partAggrInfo = stringRowTuple2._1();
+                String sessionid = StringUtils.getFieldFromConcatString(partAggrInfo, "\\|", Constants.FIELD_SESSION_ID);
+
+                int age = row.getInt(3);
+                String professional = row.getString(4);
+                String city = row.getString(5);
+                String sex = row.getString(6);
+                String full = partAggrInfo + "|"
+                        + Constants.FIELD_CITY + "=" + city + "|"
+                        + Constants.FIELD_SEX + "=" + sex + "|"
+                        + Constants.FIELD_AGE + "=" + age + "|"
+                        + Constants.FIELD_PROFESSIONAL + "=" + professional;
+                return new Tuple2<String, String>(sessionid, full);
+
+            }
+        });*/
+
+        /**
+         * 使用随机前缀和扩容RDD进行join
+         * userid2PartAggrInfoRDD
+         * userid2InfoRDD
+         */
+
+        //第一步：对分配均匀的rdd扩容100倍
+        JavaPairRDD<String, Row> commonRDD = userid2InfoRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<Long, Row>, String, Row>() {
+            @Override
+            public Iterable<Tuple2<String, Row>> call(Tuple2<Long, Row> tuple) throws Exception {
+                Long userid = tuple._1;
+                Row row = tuple._2;
+                List<Tuple2<String, Row>> list = new ArrayList<Tuple2<String, Row>>();
+
+                for (int i = 0; i < 100; i++) {
+                    String prefix = i + "_" + userid;
+                    list.add(new Tuple2<String, Row>(prefix, row));
+
+                }
+                return list;
+
+
+            }
+        });
+
+        //第二步：对数据倾斜的rdd分配100以内的随机前缀
+        JavaPairRDD<String, String> skewedRDD = userid2PartAggrInfoRDD.mapToPair(new PairFunction<Tuple2<Long, String>, String, String>() {
+            @Override
+            public Tuple2<String, String> call(Tuple2<Long, String> tuple) throws Exception {
+                String prefix = new Random().nextInt(100) + "_" + tuple._1;
+                return new Tuple2<String, String>(prefix, tuple._2);
+
+            }
+        });
+        JavaPairRDD<Long, Tuple2<String, Row>> resultRDD = skewedRDD.join(commonRDD).mapToPair(new PairFunction<Tuple2<String, Tuple2<String, Row>>, Long, Tuple2<String, Row>>() {
+            @Override
+            public Tuple2<Long, Tuple2<String, Row>> call(Tuple2<String, Tuple2<String, Row>> stringTuple2Tuple2) throws Exception {
+
+                return new Tuple2<Long, Tuple2<String, Row>>(Long.valueOf(stringTuple2Tuple2._1.split("_")[1]),stringTuple2Tuple2._2);
+
+
+            }
+        });
+
+        JavaPairRDD<String, String> stringStringJavaPairRDD = resultRDD.mapToPair(new PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>() {
             public Tuple2<String, String> call(Tuple2<Long, Tuple2<String, Row>> longTuple2Tuple2) throws Exception {
 
                 Long userid = longTuple2Tuple2._1;
