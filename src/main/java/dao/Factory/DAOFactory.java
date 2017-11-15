@@ -2,8 +2,6 @@ package dao.Factory;
 
 import dao.*;
 import dao.impl.*;
-import domain.SessionDetail;
-import domain.SessionRandomExtract;
 
 public class DAOFactory {
     public static TaskDao getTask() {
@@ -21,10 +19,16 @@ public class DAOFactory {
     public static SessionDetailDao getSessionDetailDao() {
         return new SessionDetailDaoImpl();
     }
-    public static Top10CategoryDAO getTop10CategoryDAO(){
+
+    public static Top10CategoryDAO getTop10CategoryDAO() {
         return new Top10CategoryDaoImpl();
     }
-    public static Top10CategorySessionDAO getTop10CategorySessionDAO(){
+
+    public static Top10CategorySessionDAO getTop10CategorySessionDAO() {
         return new Top10CategorySessionDAOImpl();
+    }
+
+    public static PageConvertRateDao getPageConvertRateDao() {
+        return new PageConvertRateDaoImpl();
     }
 }

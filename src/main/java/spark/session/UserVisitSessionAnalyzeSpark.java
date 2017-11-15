@@ -48,11 +48,11 @@ public class UserVisitSessionAnalyzeSpark {
         //生成模拟数据
         SparkUtils.mockData(jsc,sqlContext);
 
-        TaskDao task = DAOFactory.getTask();
-        Long taskid = ParamUtils.getTaskIdFromArgs(args);
-        Task ta = task.findById(taskid);
-        JSONObject jsonObject = JSONObject.parseObject(ta.getTask_param());
-        JavaRDD<Row> row = getActionRDDByDataRange(sqlContext, jsonObject);
+        TaskDao taskDao = DAOFactory.getTask();
+        Long taskid = ParamUtils.getTaskIdFromArgs(args,Constants.SPARK_LOCAL_TASKID_SESSION);
+        Task task = taskDao.findById(taskid);
+        JSONObject jsonObject = JSONObject.parseObject(task.getTask_param());
+        JavaRDD<Row> row = SparkUtils.getActionRDDByDataRange(sqlContext, jsonObject);
         row.persist(StorageLevel.MEMORY_ONLY());
         /**
          * 原始RDD
@@ -80,7 +80,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 随机抽取session
          */
-        randomExtractSession(jsc, ta.getTask_id(), fiter, stringRowJavaPairRDD);
+        randomExtractSession(jsc, task.getTask_id(), fiter, stringRowJavaPairRDD);
 
 
         /**
@@ -97,7 +97,7 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 获取top10热门session
          */
-        getTop10Session(jsc, ta.getTask_id(), top10CategoryList, sessionid2detailRDD);
+        getTop10Session(jsc, task.getTask_id(), top10CategoryList, sessionid2detailRDD);
 
 
         jsc.close();
@@ -846,17 +846,7 @@ public class UserVisitSessionAnalyzeSpark {
 
 
 
-    /**
-     * 获取指定日期范围内的用户访问行为数据
-     */
-    private static JavaRDD<Row> getActionRDDByDataRange(SQLContext sqlContext, JSONObject jsonObject) {
-        String startDate = ParamUtils.getParam(jsonObject, Constants.PARAM_START_DATE);
-        String endDate = ParamUtils.getParam(jsonObject, Constants.PARAM_END_DATE);
-        String sql = "select * from user_visit_action where date>='" + startDate + "' " + "and date<= '" + endDate + "'";
-        System.out.println(sql);
-        DataFrame dataFrame = sqlContext.sql(sql);
-        return dataFrame.javaRDD();
-    }
+
 
     private static JavaPairRDD<String, Row> getSessionid2ActionRDD(JavaRDD<Row> actionRDD) {
         JavaPairRDD<String, Row> stringRowJavaPairRDD = actionRDD.mapToPair(new PairFunction<Row, String, Row>() {

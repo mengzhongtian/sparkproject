@@ -11,7 +11,7 @@
     </annotationProcessing>
     <bytecodeTargetLevel>
       <module name="spark" target="1.5" />
-      <module name="sparkproject" target="1.5" />
+      <module name="sparkproject" target="1.6" />
     </bytecodeTargetLevel>
   </component>
 </project>

@@ -48,6 +48,10 @@ public interface Constants {
     String STEP_PERIOD_30_60 = "30_60";
     String STEP_PERIOD_60 = "60";
 
+    String SPARK_LOCAL_TASKID_SESSION = "spark.local.taskid.session";
+    String SPARK_LOCAL_TASKID_PAGE = "spark.local.taskid.page";
+
+
 
     /**
      * 任务相关的常量
@@ -65,5 +69,5 @@ public interface Constants {
     String PARAM_TARGET_PAGE_FLOW = "targetPageFlow";
 
 
-    String EXTRACT_SESSION_NUMBER ="extractSessionNumber" ;
+    String EXTRACT_SESSION_NUMBER = "extractSessionNumber";
 }

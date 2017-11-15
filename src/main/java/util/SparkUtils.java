@@ -1,10 +1,14 @@
 package util;
 
+import com.alibaba.fastjson.JSONObject;
 import conf.ConfigurationManager;
 import constant.Constants;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
 import sun.security.krb5.Config;
@@ -37,4 +41,18 @@ public class SparkUtils {
             MockData.mock(jsc, sqlContext);
         }
     }
+
+
+    /**
+     * 获取指定日期范围内的用户访问行为数据
+     */
+    public static JavaRDD<Row> getActionRDDByDataRange(SQLContext sqlContext, JSONObject jsonObject) {
+        String startDate = ParamUtils.getParam(jsonObject, Constants.PARAM_START_DATE);
+        String endDate = ParamUtils.getParam(jsonObject, Constants.PARAM_END_DATE);
+        String sql = "select * from user_visit_action where date>='" + startDate + "' " + "and date<= '" + endDate + "'";
+        System.out.println(sql);
+        DataFrame dataFrame = sqlContext.sql(sql);
+        return dataFrame.javaRDD();
+    }
+
 }

@@ -3,7 +3,6 @@ package dao.impl;
 import dao.Top10CategoryDAO;
 import domain.Top10Category;
 import jdbc.JDBCHelper;
-import spark.CategorySortKey;
 
 public class Top10CategoryDaoImpl implements Top10CategoryDAO {
     public void inserrt(Top10Category category) {
