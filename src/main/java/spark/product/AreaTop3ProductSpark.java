@@ -65,7 +65,25 @@ public class AreaTop3ProductSpark {
         generateTempClickProductBasicTable(sqlContext,
                 cityid2clickActionRDD, cityid2cityInfoRDD);
 
+
+        // 生成各区域各商品点击次数的临时表
+        generateTempAreaPrdocutClickCountTable(sqlContext);
+
         sc.close();
+    }
+
+    private static void generateTempAreaPrdocutClickCountTable(SQLContext sqlContext) {
+        String sql="SELECT "
+                + "area,"
+                + "product_id,"
+                + "count(*) click_count, "
+                + "group_concat_distinct(concat_long_string(city_id,city_name,':')) city_infos "
+                + "FROM tmp_click_product_basic "
+                + "GROUP BY area,product_id ";
+
+        DataFrame dataFrame= sqlContext.sql(sql);
+        dataFrame.registerTempTable("tmp_area_product_click_count");
+
     }
 
     /**
