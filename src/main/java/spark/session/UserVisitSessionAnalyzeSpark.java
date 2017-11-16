@@ -11,19 +11,15 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.broadcast.Broadcast;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.storage.StorageLevel;
 import scala.Tuple2;
-import test.MockData;
 import util.*;
 
 import java.util.*;
@@ -48,7 +44,7 @@ public class UserVisitSessionAnalyzeSpark {
         //生成模拟数据
         SparkUtils.mockData(jsc,sqlContext);
 
-        TaskDao taskDao = DAOFactory.getTask();
+        TaskDao taskDao = DAOFactory.getTaskDao();
         Long taskid = ParamUtils.getTaskIdFromArgs(args,Constants.SPARK_LOCAL_TASKID_SESSION);
         Task task = taskDao.findById(taskid);
         JSONObject jsonObject = JSONObject.parseObject(task.getTask_param());
