@@ -4,7 +4,7 @@ import dao.*;
 import dao.impl.*;
 
 public class DAOFactory {
-    public static TaskDao getTask() {
+    public static TaskDao getTaskDao() {
         return new TaskDaoImpl();
     }
 
