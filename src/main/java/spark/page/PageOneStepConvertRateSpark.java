@@ -19,7 +19,6 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import scala.Tuple2;
-import scala.collection.immutable.Stream;
 import util.DateUtils;
 import util.NumberUtils;
 import util.ParamUtils;
@@ -37,7 +36,7 @@ public class PageOneStepConvertRateSpark {
 
         Long taskid = ParamUtils.getTaskIdFromArgs(args, Constants.SPARK_LOCAL_TASKID_PAGE);
 
-        TaskDao taskDao = DAOFactory.getTask();
+        TaskDao taskDao = DAOFactory.getTaskDao();
         Task task = taskDao.findById(taskid);
         if (task == null) {
             System.out.println("can't find this task with id " + taskid);
