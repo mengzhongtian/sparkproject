@@ -68,23 +68,16 @@ public class AreaTop3ProductSpark {
 
         // 生成各区域各商品点击次数的临时表
         generateTempAreaPrdocutClickCountTable(sqlContext);
+        JavaRDD<Row> areaTop3ProductRDD = getAreaTop3ProductRDD(sqlContext);
+        long count = areaTop3ProductRDD.count();
+
+        // 生成包含完整商品信息的各区域各商品点击次数的临时表
+        generateTempAreaFullProductClickCountTable(sqlContext);
 
         sc.close();
     }
 
-    private static void generateTempAreaPrdocutClickCountTable(SQLContext sqlContext) {
-        String sql="SELECT "
-                + "area,"
-                + "product_id,"
-                + "count(*) click_count, "
-                + "group_concat_distinct(concat_long_string(city_id,city_name,':')) city_infos "
-                + "FROM tmp_click_product_basic "
-                + "GROUP BY area,product_id ";
 
-        DataFrame dataFrame= sqlContext.sql(sql);
-        dataFrame.registerTempTable("tmp_area_product_click_count");
-
-    }
 
     /**
      * 生成点击商品基础信息临时表
@@ -132,7 +125,7 @@ public class AreaTop3ProductSpark {
      * 使用Spark SQL从MySQL中查询城市信息
      */
     private static JavaPairRDD<Long, Row> getcityid2CityInfoRDD(SQLContext sqlContext) {
-        String url = null;
+        String url;
         boolean isLocal = ConfigurationManager.getBoolean(Constants.SPARK_LOCAL);
         if (isLocal) {
             url = ConfigurationManager.getProperty(Constants.JDBC_URL);
@@ -201,5 +194,71 @@ public class AreaTop3ProductSpark {
 
     }
 
+
+
+    private static void generateTempAreaPrdocutClickCountTable(SQLContext sqlContext) {
+        String sql="SELECT "
+                + "area,"
+                + "product_id,"
+                + "count(*) click_count, "
+                + "group_concat_distinct(concat_long_string(city_id,city_name,':')) city_infos "
+                + "FROM tmp_click_product_basic "
+                + "GROUP BY area,product_id ";
+
+        DataFrame dataFrame= sqlContext.sql(sql);
+        dataFrame.registerTempTable("tmp_area_product_click_count");
+
+    }
+
+    private static JavaRDD<Row> getAreaTop3ProductRDD(SQLContext sqlContext) {
+
+        String sql =
+                "SELECT "
+                        + "area,"
+                        + "CASE "
+                        + "WHEN area='China North' OR area='China East' THEN 'A Level' "
+                        + "WHEN area='China South' OR area='China Middle' THEN 'B Level' "
+                        + "WHEN area='West North' OR area='West South' THEN 'C Level' "
+                        + "ELSE 'D Level' "
+                        + "END area_level,"
+                        + "product_id,"
+                        + "click_count,"
+                        + "city_infos,"
+                        + "product_name,"
+                        + "product_status "
+                        + "FROM ("
+                        + "SELECT "
+                        + "area,"
+                        + "product_id,"
+                        + "click_count,"
+                        + "city_infos,"
+                        + "product_name,"
+                        + "product_status,"
+                        + "row_number() OVER (PARTITION BY area ORDER BY click_count DESC) rank "
+                        + "FROM tmp_area_fullprod_click_count "
+                        + ") t "
+                        + "WHERE rank<=3";
+
+        DataFrame df = sqlContext.sql(sql);
+
+        return df.javaRDD();
+    }
+
+    private static void generateTempAreaFullProductClickCountTable(SQLContext sqlContext) {
+        String sql = "select "
+                + "tapcc.area,"
+                + "tapcc.product_id,"
+                + "tapcc.click_count,"
+                + "tapcc.city_infos,"
+                + "pi.product_name,"
+                +"if(get_json_object(pi.extend_info,'product_status')='0','Self','Third Party') product_status "
+                +" from tmp_area_product_click_count tapcc join product_info pi on tapcc.product_id=pi.product_id";
+
+        DataFrame df = sqlContext.sql(sql);
+
+        System.out.println("tmp_area_fullprod_click_count: " + df.count());
+
+        df.registerTempTable("tmp_area_fullprod_click_count");
+    }
 
 }
