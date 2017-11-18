@@ -6,6 +6,7 @@
         <option value="$PROJECT_DIR$/pom.xml" />
         <option value="$PROJECT_DIR$/spark20/pom.xml" />
         <option value="$PROJECT_DIR$/spark2.0/pom.xml" />
+        <option value="$PROJECT_DIR$/spark2.2/pom.xml" />
       </list>
     </option>
     <option name="ignoredFiles">
